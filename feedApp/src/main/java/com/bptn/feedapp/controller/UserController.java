@@ -1,6 +1,7 @@
 package com.bptn.feedapp.controller;
 
 import java.sql.Timestamp;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -15,10 +16,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-
 import com.bptn.feedapp.jpa.User;
 import com.bptn.feedapp.service.UserService;
+import static org.springframework.http.HttpStatus.OK;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 
+@CrossOrigin(exposedHeaders = "Authorization")
 @RestController
 @RequestMapping("/user")
 public class UserController {
@@ -27,6 +31,8 @@ public class UserController {
 	
 	@Autowired
 	UserService userService;
+	
+	
 	
 	
 	@GetMapping("/test")
@@ -88,6 +94,36 @@ public class UserController {
 		
 	}
 	
+	@GetMapping("/verify/email")
+	public void verifyEmail() {
+			
+		logger.debug("Verifying Email");
+			
+		this.userService.verifyEmail();
+	}
 	
+	@PostMapping("/login")
+	public ResponseEntity<User> login(@RequestBody User user) {
+		
+		logger.debug("Authenticating, username: {}, password: {}", user.getUsername(), user.getPassword());
+			
+		/* Spring Security Authentication. */
+		user = this.userService.authenticate(user);
+
+		/* Generate JWT and HTTP Header */
+		HttpHeaders jwtHeader = this.userService.generateJwtHeader(user.getUsername());
+					
+		logger.debug("User Authenticated, username: {}", user.getUsername());
+			
+		return new ResponseEntity<>(user, jwtHeader, OK);
+	}
+	
+	@GetMapping("/reset/{emailId}")
+	public void sendResetPasswordEmail(@PathVariable String emailId) {
+			
+			logger.debug("Sending Reset Password Email, emailId: {}", emailId);
+			
+			this.userService.sendResetPasswordEmail(emailId);
+	}
 	
 }

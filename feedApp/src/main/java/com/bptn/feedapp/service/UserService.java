@@ -15,9 +15,21 @@ import com.bptn.feedapp.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.context.SecurityContextHolder;
 import com.bptn.feedapp.exception.domain.UserNotFoundException;
+import com.bptn.feedapp.exception.domain.EmailNotVerifiedException;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import com.bptn.feedapp.provider.ResourceProvider;
+import com.bptn.feedapp.security.JwtService;
+import static org.springframework.http.HttpHeaders.AUTHORIZATION;
+import org.springframework.http.HttpHeaders;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class UserService {
+	
+	final Logger logger = LoggerFactory.getLogger(this.getClass());
 
 	@Autowired
 	UserRepository userRepository;
@@ -27,6 +39,15 @@ public class UserService {
 	
 	@Autowired
 	PasswordEncoder passwordEncoder;
+	
+	@Autowired
+	AuthenticationManager authenticationManager;
+	
+	@Autowired
+	JwtService jwtService;
+
+	@Autowired
+	ResourceProvider provider;
 	
 	
 	public List<User> listUsers() {
@@ -86,5 +107,45 @@ public class UserService {
 
 		this.userRepository.save(user);
 		
+	}
+	
+	private static User isEmailVerified(User user) {
+		 
+		if (user.getEmailVerified().equals(false)) {
+	        throw new EmailNotVerifiedException(String.format("Email requires verification, %s", user.getEmailId()));
+	    }	
+			
+	    return user;
+	}
+	
+	private Authentication authenticate(String username, String password) {
+		return this.authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
+	}
+	
+	public User authenticate(User user) {
+
+		/* Spring Security Authentication. */
+		this.authenticate(user.getUsername(), user.getPassword());
+
+		/* Get User from the DB. */
+		return this.userRepository.findByUsername(user.getUsername()).map(UserService::isEmailVerified).get();
+	}
+	
+	public HttpHeaders generateJwtHeader(String username) {
+		HttpHeaders headers = new HttpHeaders();
+		headers.add(AUTHORIZATION, this.jwtService.generateJwtToken(username,this.provider.getJwtExpiration()));
+
+		return headers;
+	}
+	
+	public void sendResetPasswordEmail(String emailId) {
+
+		Optional<User> opt = this.userRepository.findByEmailId(emailId);
+
+		if (opt.isPresent()) {
+			this.emailService.sendResetPasswordEmail(opt.get());
+		} else {
+			logger.debug("Email doesn't exist, {}", emailId);
+		}
 	}
 }
