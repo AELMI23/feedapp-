@@ -1,6 +1,4 @@
 package com.bptn.feedapp.service;
-import com.bptn.feedapp.exception.domain.EmailExistException;
-import com.bptn.feedapp.exception.domain.UsernameExistException;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -12,6 +10,8 @@ import org.springframework.stereotype.Service;
 
 import com.bptn.feedapp.jpa.User;
 import com.bptn.feedapp.repository.UserRepository;
+import com.bptn.feedapp.exception.domain.EmailExistException;
+import com.bptn.feedapp.exception.domain.UsernameExistException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.context.SecurityContextHolder;
 import com.bptn.feedapp.exception.domain.UserNotFoundException;
@@ -25,47 +25,49 @@ import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import org.springframework.http.HttpHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+import org.springframework.util.StringUtils;
+import com.bptn.feedapp.jpa.Profile;
 
 @Service
 public class UserService {
-	
+
 	final Logger logger = LoggerFactory.getLogger(this.getClass());
 
 	@Autowired
 	UserRepository userRepository;
-	
+
 	@Autowired
 	EmailService emailService;
-	
+
 	@Autowired
 	PasswordEncoder passwordEncoder;
-	
+
 	@Autowired
 	AuthenticationManager authenticationManager;
-	
+
 	@Autowired
 	JwtService jwtService;
 
 	@Autowired
 	ResourceProvider provider;
-	
-	
+
 	public List<User> listUsers() {
-		
+
 		return this.userRepository.findAll();
-			
 	}
-	
+
 	public Optional<User> findByUsername(String username) {
-		
+
 		return this.userRepository.findByUsername(username);
 	}
-	
+
 	public void createUser(User user) {
-		
+
 		this.userRepository.save(user);
 	}
-	
+
 	public User signup(User user) {
 
 		user.setUsername(user.getUsername().toLowerCase());
@@ -82,8 +84,8 @@ public class UserService {
 		this.userRepository.save(user);
 		return user;
 
-}
-	
+	}
+
 	private void validateUsernameAndEmail(String username, String emailId) {
 
 		this.userRepository.findByUsername(username).ifPresent(u -> {
@@ -95,7 +97,7 @@ public class UserService {
 		});
 
 	}
-	
+
 	public void verifyEmail() {
 
 		String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -106,22 +108,17 @@ public class UserService {
 		user.setEmailVerified(true);
 
 		this.userRepository.save(user);
-		
 	}
-	
+
 	private static User isEmailVerified(User user) {
-		 
+
 		if (user.getEmailVerified().equals(false)) {
-	        throw new EmailNotVerifiedException(String.format("Email requires verification, %s", user.getEmailId()));
-	    }	
-			
-	    return user;
+			throw new EmailNotVerifiedException(String.format("Email requires verification, %s", user.getEmailId()));
+		}
+
+		return user;
 	}
-	
-	private Authentication authenticate(String username, String password) {
-		return this.authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
-	}
-	
+
 	public User authenticate(User user) {
 
 		/* Spring Security Authentication. */
@@ -130,14 +127,18 @@ public class UserService {
 		/* Get User from the DB. */
 		return this.userRepository.findByUsername(user.getUsername()).map(UserService::isEmailVerified).get();
 	}
-	
+
+	private Authentication authenticate(String username, String password) {
+		return this.authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
+	}
+
 	public HttpHeaders generateJwtHeader(String username) {
 		HttpHeaders headers = new HttpHeaders();
-		headers.add(AUTHORIZATION, this.jwtService.generateJwtToken(username,this.provider.getJwtExpiration()));
+		headers.add(AUTHORIZATION, this.jwtService.generateJwtToken(username, this.provider.getJwtExpiration()));
 
 		return headers;
 	}
-	
+
 	public void sendResetPasswordEmail(String emailId) {
 
 		Optional<User> opt = this.userRepository.findByEmailId(emailId);
@@ -147,5 +148,95 @@ public class UserService {
 		} else {
 			logger.debug("Email doesn't exist, {}", emailId);
 		}
+	}
+
+	public void resetPassword(String password) {
+
+		String username = SecurityContextHolder.getContext().getAuthentication().getName();
+
+		User user = this.userRepository.findByUsername(username)
+				.orElseThrow(() -> new UserNotFoundException(String.format("Username doesn't exist, %s", username)));
+
+		user.setPassword(this.passwordEncoder.encode(password));
+
+		this.userRepository.save(user);
+	}
+
+	public User getUser() {
+
+		String username = SecurityContextHolder.getContext().getAuthentication().getName();
+
+		/* Get User from the DB. */
+		return this.userRepository.findByUsername(username)
+				.orElseThrow(() -> new UserNotFoundException(String.format("Username doesn't exist, %s", username)));
+	}
+
+	private void updateValue(Supplier<String> getter, Consumer<String> setter) {
+
+		Optional.ofNullable(getter.get())
+				// .filter(StringUtils::hasText)
+				.map(String::trim).ifPresent(setter);
+	}
+
+	private void updatePassword(Supplier<String> getter, Consumer<String> setter) {
+
+		Optional.ofNullable(getter.get()).filter(StringUtils::hasText).map(this.passwordEncoder::encode)
+				.ifPresent(setter);
+	}
+
+	private User updateUser(User user, User currentUser) {
+
+		this.updateValue(user::getFirstName, currentUser::setFirstName);
+		this.updateValue(user::getLastName, currentUser::setLastName);
+		this.updateValue(user::getPhone, currentUser::setPhone);
+		this.updateValue(user::getEmailId, currentUser::setEmailId);
+		this.updatePassword(user::getPassword, currentUser::setPassword);
+
+		return this.userRepository.save(currentUser);
+	}
+	
+	public User updateUser(User user) {
+		
+		String username = SecurityContextHolder.getContext().getAuthentication().getName();
+
+		/* Validates the new email if provided */
+		this.userRepository.findByEmailId(user.getEmailId())
+	                            .filter(u->!u.getUsername().equals(username))
+	                            .ifPresent(u -> {throw new EmailExistException(String.format("Email already exists, %s", u.getEmailId()));});
+		    
+		/* Get and Update User */	
+		return this.userRepository.findByUsername(username)
+					            .map(currentUser -> this.updateUser(user, currentUser))
+					            .orElseThrow(()-> new UserNotFoundException(String.format("Username doesn't exist, %s", username)));
+	}
+	
+	private User updateUserProfile(Profile profile, User user) {
+
+		Profile currentProfile = user.getProfile();
+
+		if (Optional.ofNullable(currentProfile).isPresent()) {
+
+			this.updateValue(profile::getHeadline, currentProfile::setHeadline);
+			this.updateValue(profile::getBio, currentProfile::setBio);
+			this.updateValue(profile::getCity, currentProfile::setCity);
+			this.updateValue(profile::getCountry, currentProfile::setCountry);
+			this.updateValue(profile::getPicture, currentProfile::setPicture);
+		} 
+	    else {
+			user.setProfile(profile);
+			profile.setUser(user);
+		}
+
+		return this.userRepository.save(user);
+	}
+	
+	public User updateUserProfile(Profile profile) {
+		
+		String username = SecurityContextHolder.getContext().getAuthentication().getName();
+
+		/* Get and Update User */	
+		return this.userRepository.findByUsername(username)
+		              .map(user -> this.updateUserProfile(profile, user))
+	                  .orElseThrow(()-> new UserNotFoundException(String.format("Username doesn't exist, %s", username)));
 	}
 }

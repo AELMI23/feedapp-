@@ -1,7 +1,6 @@
 package com.bptn.feedapp.controller;
 
 import java.sql.Timestamp;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -16,55 +15,53 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.bptn.feedapp.jdbc.UserBean;
 import com.bptn.feedapp.jpa.User;
 import com.bptn.feedapp.service.UserService;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import static org.springframework.http.HttpStatus.OK;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.bptn.feedapp.jpa.Profile;
 
 @CrossOrigin(exposedHeaders = "Authorization")
 @RestController
 @RequestMapping("/user")
 public class UserController {
-	
+
 	final Logger logger = LoggerFactory.getLogger(this.getClass());
-	
+
 	@Autowired
 	UserService userService;
-	
-	
-	
-	
+
 	@GetMapping("/test")
 	public String testController() {
-		
+
 		logger.debug("The testController() method was invoked!");
-		
+
 		return "The FeedApp application is up and running";
-		
-		
 	}
-	
+
 	@GetMapping("/")
 	public List<User> listUsers() {
 		
 		logger.debug("The listUsers() method was invoked!");
 		return this.userService.listUsers();
-		
 	}
-	
+
 	@GetMapping("/{username}")
 	public Optional<User> findByUsername(@PathVariable String username) {
 		
 		logger.debug("The findByUsername() method was invoked!, username={}", username);
 		return this.userService.findByUsername(username);
-		
-		
+
 	}
 	
-	
 	@GetMapping("/{first}/{last}/{username}/{password}/{phone}/{emailId}")
-	public String createUser( @PathVariable String first, @PathVariable String last, @PathVariable String username, @PathVariable String password, @PathVariable String phone, @PathVariable String emailId) {
+	public String createUser( @PathVariable String first, @PathVariable String last, 
+			@PathVariable String username, @PathVariable String password, @PathVariable String phone, 
+			@PathVariable String emailId) {
 		
 		User user = new User();
 		
@@ -82,16 +79,13 @@ public class UserController {
 		this.userService.createUser(user);
 				
 		return "User Created Successfully";
-	
-
 }
 	
 	@PostMapping("/signup")
-	public User signup(@RequestBody User user) {	
+	public User signup(@RequestBody User user) {
 		logger.debug("Signing up, username: {}", user.getUsername());
 		
 		return this.userService.signup(user);
-		
 	}
 	
 	@GetMapping("/verify/email")
@@ -126,4 +120,35 @@ public class UserController {
 			this.userService.sendResetPasswordEmail(emailId);
 	}
 	
+	@PostMapping("/reset")
+	public void passwordReset(@RequestBody JsonNode json) {
+
+		logger.debug("Resetting Password, password: {}", json.get("password").asText());
+
+		this.userService.resetPassword(json.get("password").asText());
+	}
+	
+	@GetMapping("/get")
+	public User getUser() {
+			
+		logger.debug("Getting User Data");
+			
+		return this.userService.getUser();
+	}
+	
+	@PostMapping("/update")
+	public User updateUser(@RequestBody User user) {
+			
+		logger.debug("Updating User Data");
+			
+		return this.userService.updateUser(user);
+	}
+	
+	@PostMapping("/update/profile")
+	public User updateUserProfile(@RequestBody Profile profile) {
+			
+		logger.debug("Updating User Profile Data, Profile: {}", profile.toString());
+			
+		return this.userService.updateUserProfile(profile);
+	}
 }
