@@ -171,12 +171,7 @@ public class UserService {
 				.orElseThrow(() -> new UserNotFoundException(String.format("Username doesn't exist, %s", username)));
 	}
 
-	private void updateValue(Supplier<String> getter, Consumer<String> setter) {
-
-		Optional.ofNullable(getter.get())
-				// .filter(StringUtils::hasText)
-				.map(String::trim).ifPresent(setter);
-	}
+	
 
 	private void updatePassword(Supplier<String> getter, Consumer<String> setter) {
 
@@ -208,6 +203,13 @@ public class UserService {
 		return this.userRepository.findByUsername(username)
 					            .map(currentUser -> this.updateUser(user, currentUser))
 					            .orElseThrow(()-> new UserNotFoundException(String.format("Username doesn't exist, %s", username)));
+	}
+	
+	private void updateValue(Supplier<String> getter, Consumer<String> setter) {
+
+		Optional.ofNullable(getter.get())
+				// .filter(StringUtils::hasText)
+				.map(String::trim).ifPresent(setter);
 	}
 	
 	private User updateUserProfile(Profile profile, User user) {
