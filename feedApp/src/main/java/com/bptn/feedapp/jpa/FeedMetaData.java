@@ -43,8 +43,7 @@ public class FeedMetaData implements Serializable {
 	private User user;
 	
 	public FeedMetaData() {
-		
-		
+			
 	}
 
 	public Integer getFeedMetaDataId() {
